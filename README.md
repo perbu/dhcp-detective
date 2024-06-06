@@ -11,21 +11,17 @@ DHCP Detective is a tool for detecting rogue DHCP servers on a network. It liste
 
 ## Installation
 
-1. Clone the repository:
+1. Install and build the binary:
    ```
-   git clone https://github.com/perbu/dhcp-detective.git
-   ```
-
-2. Install the dependencies:
-   ```
-   go mod download
+   go install github.com/perbu/dhcp-detective@latest
    ```
 
-3. Create a `.env` file in the project root with your Slack bot token and channel:
+2. Set the following environment variables:
    ```
    SLACK_TOKEN=your_slack_bot_token
    SLACK_CHANNEL=your_slack_channel_id
    ```
+   
 
 ## Usage
 
@@ -45,11 +41,13 @@ go run main.go -i eth0 -a 00:11:22:33:44:55
 
 The tool will start listening for DHCP packets on the specified interface. If it detects a DHCP packet from a server other than the one specified by the allowed MAC address, it will send an alert to the configured Slack channel.
 
+## Tests
+
+There are no tests. There isn't really much logic here, it's all glue code.
+
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-
-Please make sure to update tests as appropriate.
 
 ## License
 

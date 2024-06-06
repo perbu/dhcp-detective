@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const sayHello = false
+
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -59,10 +61,13 @@ func run(ctx context.Context, stdout, stderr *os.File, args []string, env []stri
 	if err != nil {
 		return fmt.Errorf("slackbot.New: %w", err)
 	}
-	hostname, _ := os.Hostname()
-	err = slackBot.Say(fmt.Sprintf("Starting DHCP detective on %s", hostname))
-	if err != nil {
-		return fmt.Errorf("slackBot.Say: %w", err)
+
+	if sayHello {
+		hostname, _ := os.Hostname()
+		err = slackBot.Say(fmt.Sprintf("Starting DHCP detective on %s", hostname))
+		if err != nil {
+			return fmt.Errorf("slackBot.Say: %w", err)
+		}
 	}
 
 	// start the DHCP filter:
@@ -103,19 +108,11 @@ func packetToString(packet gopacket.Packet) string {
 	// Get the Ethernet layer
 	ethernetLayer := packet.Layer(layers.LayerTypeEthernet)
 	if ethernetLayer == nil {
-		return "Ethernet layer not found"
+		return "(no ethernet layer in packet)"
 	}
-	ethernet, _ := ethernetLayer.(*layers.Ethernet)
-
-	// Get the IPv4 layer
-	ipv4Layer := packet.Layer(layers.LayerTypeIPv4)
-	if ipv4Layer == nil {
-		return "IPv4 layer not found"
+	ethernet, ok := ethernetLayer.(*layers.Ethernet)
+	if !ok {
+		return "Ethernet layer type assertion failed"
 	}
-	ipv4, _ := ipv4Layer.(*layers.IPv4)
-
-	// Create the string representation
-	packetStr := fmt.Sprintf("Source MAC: %s, Source IP: %s", ethernet.SrcMAC, ipv4.SrcIP)
-
-	return packetStr
+	return fmt.Sprintf("Source MAC: %s", ethernet.SrcMAC)
 }

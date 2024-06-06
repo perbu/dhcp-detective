@@ -23,15 +23,20 @@ func Snoop(ctx context.Context, iface, filter string) (PacketChan, error) {
 	}
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	pchan := make(chan gopacket.Packet, 100)
-	ichan := packetSource.Packets()
+	ichan := packetSource.PacketsCtx(ctx)
 	go func() {
-		select {
-		case <-ctx.Done():
-			fmt.Println("context cancelled, closing handle and channel")
-			handle.Close()
-			close(pchan)
-		case packet := <-ichan:
-			pchan <- packet
+		defer fmt.Println("Snooper ending")
+		for {
+			select {
+			case <-ctx.Done():
+				fmt.Println("context cancelled, closing handle and channel. this may take some time.")
+				handle.Close()
+				fmt.Println("pcap handle closed")
+				close(pchan)
+				return
+			case packet := <-ichan:
+				pchan <- packet
+			}
 		}
 	}()
 	return pchan, nil
@@ -41,6 +46,7 @@ func Snoop(ctx context.Context, iface, filter string) (PacketChan, error) {
 // only DHCP packet that are NOT coming from the allowed MAC address. So the packets
 // will be coming from rogue DHCP servers.
 func DHCPFilter(ctx context.Context, iface, allowed string) (PacketChan, error) {
+	defer fmt.Println("DHCPFilter ending")
 	filter := fmt.Sprintf("udp and port 67 and port 68 and not ether src %s", allowed)
 	return Snoop(ctx, iface, filter)
 }
