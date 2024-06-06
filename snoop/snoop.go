@@ -46,7 +46,9 @@ func Snoop(ctx context.Context, iface, filter string) (PacketChan, error) {
 // only DHCP packet that are NOT coming from the allowed MAC address. So the packets
 // will be coming from rogue DHCP servers.
 func DHCPOffers(ctx context.Context, iface, allowed string) (PacketChan, error) {
-	defer fmt.Println("DHCPOffers ending")
-	filter := fmt.Sprintf("udp and port 68 and not ether src %s", allowed)
+	// BPF filter: UDP, naturally. Port 68 is the DHCP client port, and the 9th byte
+	// of the DHCP packet is the DHCP message type. 0x02 is the DHCP offer message.
+	// We also filter out packets coming from the allowed MAC address.
+	filter := fmt.Sprintf("udp and port 68 and (udp[8:1] = 0x02) and not ether src %s", allowed)
 	return Snoop(ctx, iface, filter)
 }
