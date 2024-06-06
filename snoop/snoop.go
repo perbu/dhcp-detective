@@ -42,11 +42,11 @@ func Snoop(ctx context.Context, iface, filter string) (PacketChan, error) {
 	return pchan, nil
 }
 
-// DHCPFilter takes a allowed MAC address and returns a channel that will deliver
+// DHCPOffers takes a allowed MAC address and returns a channel that will deliver
 // only DHCP packet that are NOT coming from the allowed MAC address. So the packets
 // will be coming from rogue DHCP servers.
-func DHCPFilter(ctx context.Context, iface, allowed string) (PacketChan, error) {
-	defer fmt.Println("DHCPFilter ending")
-	filter := fmt.Sprintf("udp and port 67 and port 68 and not ether src %s", allowed)
+func DHCPOffers(ctx context.Context, iface, allowed string) (PacketChan, error) {
+	defer fmt.Println("DHCPOffers ending")
+	filter := fmt.Sprintf("udp and port 68 and not ether src %s", allowed)
 	return Snoop(ctx, iface, filter)
 }

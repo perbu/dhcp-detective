@@ -71,9 +71,9 @@ func run(ctx context.Context, stdout, stderr *os.File, args []string, env []stri
 	}
 
 	// start the DHCP filter:
-	dhcpChan, err := snoop.DHCPFilter(ctx, *interfaceFlag, *macAddressFlag)
+	dhcpChan, err := snoop.DHCPOffers(ctx, *interfaceFlag, *macAddressFlag)
 	if err != nil {
-		return fmt.Errorf("snoop.DHCPFilter: %w", err)
+		return fmt.Errorf("snoop.DHCPOffers: %w", err)
 	}
 	lastAlert := time.Time{}
 	fmt.Println("Listening for rogue DHCP servers...")
