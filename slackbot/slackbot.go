@@ -26,6 +26,8 @@ func New(token, channel string) (*Bot, error) {
 
 func (b *Bot) Say(message string) error {
 	fmt.Println("Message:", message)
+	fmt.Println("Slack disabled")
+	return nil
 	_, _, err := b.client.PostMessage(b.channel, slack.MsgOptionText(message, false))
 	if err != nil {
 		return fmt.Errorf("failed to send message: %v", err)

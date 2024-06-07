@@ -7,6 +7,7 @@ import (
 	"github.com/gopacket/gopacket"
 	"github.com/gopacket/gopacket/layers"
 	"github.com/joho/godotenv"
+	"github.com/perbu/dhcp-detective/dhcp"
 	"github.com/perbu/dhcp-detective/slackbot"
 	"github.com/perbu/dhcp-detective/snoop"
 	"os"
@@ -75,16 +76,36 @@ func run(ctx context.Context, stdout, stderr *os.File, args []string, env []stri
 	if err != nil {
 		return fmt.Errorf("snoop.DHCPOffers: %w", err)
 	}
+	// start the prober, this will send out messages every minute
+
+	prober, err := dhcp.New(*interfaceFlag)
+	if err != nil {
+		return fmt.Errorf("dhcp.New: %w", err)
+	}
+
+	go func() {
+		time.Sleep(5 * time.Second)
+		for {
+			err := prober.Disco()
+			if err != nil {
+				fmt.Fprintf(stderr, "prober.Disco: %v\n", err)
+				panic("prober.Disco failed")
+			}
+			time.Sleep(time.Minute)
+		}
+	}()
+
 	lastAlert := time.Time{}
 	fmt.Println("Listening for rogue DHCP servers...")
 	for packet := range dhcpChan {
+		str := packetToString(packet)
+		fmt.Printf("Got rouge DHCP packet: %s\n", str)
 		// only alert once every 10 minutes
 		if time.Since(lastAlert) < 10*time.Minute {
 			continue
 		}
 		lastAlert = time.Now()
-		packetStr := packetToString(packet)
-		err := slackBot.Say(fmt.Sprintf("Rogue DHCP server detected: %s", packetStr))
+		err := slackBot.Say(fmt.Sprintf("Rogue DHCP server detected: %s", str))
 		if err != nil {
 			return fmt.Errorf("slackBot.Say: %w", err)
 		}

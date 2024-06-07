@@ -50,5 +50,6 @@ func DHCPOffers(ctx context.Context, iface, allowed string) (PacketChan, error) 
 	// of the DHCP packet is the DHCP message type. 0x02 is the DHCP offer message.
 	// We also filter out packets coming from the allowed MAC address.
 	filter := fmt.Sprintf("udp and port 68 and (udp[8:1] = 0x02) and not ether src %s", allowed)
+	fmt.Printf("Snoop filter: %s\n", filter)
 	return Snoop(ctx, iface, filter)
 }
