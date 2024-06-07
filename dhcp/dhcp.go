@@ -5,6 +5,7 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv4"
 	"github.com/insomniacslk/dhcp/dhcpv4/nclient4"
 	"github.com/insomniacslk/dhcp/interfaces"
+	"log/slog"
 	"net"
 	"time"
 )
@@ -20,11 +21,14 @@ type State struct {
 	iface    *net.Interface
 	conn     net.PacketConn // to be filled by a NewRawUDPConn call
 	c        *nclient4.Client
+	logger   *slog.Logger
 }
 
-func New(ifaceName string) (*State, error) {
+func New(ifaceName string, logger *slog.Logger) (*State, error) {
 	var err error
-	s := &State{}
+	s := &State{
+		logger: logger,
+	}
 	s.iface, err = getInterfaceByName(ifaceName)
 	if err != nil {
 		return nil, fmt.Errorf("getInterfaceByName: %w", err)
@@ -33,6 +37,7 @@ func New(ifaceName string) (*State, error) {
 	if err != nil {
 		return nil, fmt.Errorf("creating raw socket: %w", err)
 	}
+	logger.Debug("raw socket initialized", "iface", s.iface.Name)
 	return s, nil
 }
 

@@ -10,13 +10,13 @@ import (
 	"github.com/perbu/dhcp-detective/dhcp"
 	"github.com/perbu/dhcp-detective/slackbot"
 	"github.com/perbu/dhcp-detective/snoop"
+	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 )
-
-const sayHello = false
 
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -31,21 +31,21 @@ func main() {
 }
 
 func run(ctx context.Context, stdout, stderr *os.File, args []string, env []string) error {
-	// handle arguments, both are required:
-	// -i interface
-	// -a allowed MAC address
+	// -i interface, required
+	// -d debug
 	interfaceFlag := flag.String("i", "", "Interface to listen on")
-	macAddressFlag := flag.String("a", "", "Allowed MAC address")
+	debugFlag := flag.Bool("d", false, "Enable debug output")
 	flag.CommandLine.Parse(args[1:])
 
 	if *interfaceFlag == "" {
 		return fmt.Errorf("please provide the interface to listen on using the -i flag")
 	}
-	if *macAddressFlag == "" {
-		return fmt.Errorf("please provide the allowed MAC address using the -a flag")
+	level := slog.LevelInfo
+	if *debugFlag {
+		level = slog.LevelDebug
 	}
-	fmt.Printf("Interface: %s\n", *interfaceFlag)
-	fmt.Printf("Allowed MAC address: %s\n", *macAddressFlag)
+	logHandler := slog.NewTextHandler(stderr, &slog.HandlerOptions{Level: level})
+	logger := slog.New(logHandler)
 
 	// set up the slack bot:
 	slackToken, ok := getEnvString(env, "SLACK_TOKEN")
@@ -58,34 +58,37 @@ func run(ctx context.Context, stdout, stderr *os.File, args []string, env []stri
 		return fmt.Errorf("please set the SLACK_CHANNEL environment variable")
 
 	}
-	slackBot, err := slackbot.New(slackToken, slackChannel)
+	slackBot, err := slackbot.New(slackToken, slackChannel, logger)
 	if err != nil {
 		return fmt.Errorf("slackbot.New: %w", err)
 	}
 
-	if sayHello {
-		hostname, _ := os.Hostname()
-		err = slackBot.Say(fmt.Sprintf("Starting DHCP detective on %s", hostname))
-		if err != nil {
-			return fmt.Errorf("slackBot.Say: %w", err)
-		}
+	logger.Debug("slackbot initialized")
+
+	hostname, _ := os.Hostname()
+	if hostname == "" {
+		hostname = "[unknown]"
+	}
+	err = slackBot.Say(fmt.Sprintf("Starting DHCP detective on %s", hostname))
+	if err != nil {
+		return fmt.Errorf("slackBot.Say: %w", err)
 	}
 
 	// start the DHCP filter:
-	dhcpChan, err := snoop.DHCPOffers(ctx, *interfaceFlag, *macAddressFlag)
+	dhcpChan, err := snoop.DHCPOffers(ctx, *interfaceFlag)
 	if err != nil {
 		return fmt.Errorf("snoop.DHCPOffers: %w", err)
 	}
-	// start the prober, this will send out messages every minute
+	logger.Debug("DHCP snoop initialized")
 
-	prober, err := dhcp.New(*interfaceFlag)
+	prober, err := dhcp.New(*interfaceFlag, logger)
 	if err != nil {
 		return fmt.Errorf("dhcp.New: %w", err)
 	}
-
 	go func() {
 		time.Sleep(5 * time.Second)
 		for {
+			logger.Debug("Sending DHCP discovery")
 			err := prober.Disco()
 			if err != nil {
 				fmt.Fprintf(stderr, "prober.Disco: %v\n", err)
@@ -96,21 +99,44 @@ func run(ctx context.Context, stdout, stderr *os.File, args []string, env []stri
 	}()
 
 	lastAlert := time.Time{}
-	fmt.Println("Listening for rogue DHCP servers...")
+	logger.Info("Waiting for first DHCP offer")
+	firstPacket := <-dhcpChan
+	logger.Info("Got first DHCP offer, assuming this DHCP server is kosher", "packet", packetToString(firstPacket))
+
+	acceptedMAC, ok := extractMac(firstPacket)
+	if !ok {
+		return fmt.Errorf("could not extract MAC address from first DHCP offer")
+	}
 	for packet := range dhcpChan {
-		str := packetToString(packet)
-		fmt.Printf("Got rouge DHCP packet: %s\n", str)
-		// only alert once every 10 minutes
+		logger.Debug("Got DHCP offer", "packet", packet)
+		mac, ok := extractMac(packet)
+		if !ok {
+			logger.Warn("packet does not have an Ethernet layer", "packet", packet)
+			continue
+		}
 		if time.Since(lastAlert) < 10*time.Minute {
+			logger.Info("Ignoring packet, too soon since last alert")
+			continue
+		}
+		if mac.String() == acceptedMAC.String() {
+			logger.Debug("Ignoring packet, MAC address is the accepted one")
 			continue
 		}
 		lastAlert = time.Now()
-		err := slackBot.Say(fmt.Sprintf("Rogue DHCP server detected: %s", str))
+		err := slackBot.Say(fmt.Sprintf("Rogue DHCP server detected: %s", mac.String()))
 		if err != nil {
 			return fmt.Errorf("slackBot.Say: %w", err)
 		}
 	}
 	return nil
+}
+
+func extractMac(packet gopacket.Packet) (net.HardwareAddr, bool) {
+	eth, ok := packet.Layer(layers.LayerTypeEthernet).(*layers.Ethernet)
+	if !ok {
+		return net.HardwareAddr{}, false
+	}
+	return eth.SrcMAC, true
 }
 
 func getEnvString(env []string, key string) (string, bool) {
