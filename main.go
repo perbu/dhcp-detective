@@ -30,13 +30,18 @@ func main() {
 
 }
 
-func run(ctx context.Context, stdout, stderr *os.File, args []string, env []string) error {
+func run(octx context.Context, stdout, stderr *os.File, args []string, env []string) error {
+	ctx, cancel := context.WithCancel(octx)
+	defer cancel()
 	// -i interface, required
 	// -d debug
 	interfaceFlag := flag.String("i", "", "Interface to listen on")
 	debugFlag := flag.Bool("d", false, "Enable debug output")
 	interval := flag.Duration("interval", 5*time.Minute, "Interval between DHCP discoveries")
-	flag.CommandLine.Parse(args[1:])
+	if err := flag.CommandLine.Parse(args[1:]); err != nil {
+		return fmt.Errorf("flag.CommandLine.Parse: %w", err)
+	}
+
 	// check that interval is at least 10 seconds:
 	if *interval < 10*time.Second {
 		return fmt.Errorf("interval must be at least 10 seconds, come on! (was %s)", *interval)
@@ -62,7 +67,7 @@ func run(ctx context.Context, stdout, stderr *os.File, args []string, env []stri
 		return fmt.Errorf("please set the SLACK_CHANNEL environment variable")
 
 	}
-	slackBot, err := slackbot.New(slackToken, slackChannel, logger)
+	slackBot, err := slackbot.New(slackToken, slackChannel, logger, *debugFlag)
 	if err != nil {
 		return fmt.Errorf("slackbot.New: %w", err)
 	}
@@ -95,8 +100,9 @@ func run(ctx context.Context, stdout, stderr *os.File, args []string, env []stri
 			logger.Debug("Sending DHCP discovery")
 			err := prober.Disco()
 			if err != nil {
-				fmt.Fprintf(stderr, "prober.Disco: %v\n", err)
-				panic("prober.Disco failed")
+				_, _ = fmt.Fprintf(stderr, "prober.Disco: %v\n", err)
+				logger.Error("prober.Disco failed, cancelling context", "error", err)
+				cancel()
 			}
 			time.Sleep(*interval)
 		}
@@ -111,28 +117,37 @@ func run(ctx context.Context, stdout, stderr *os.File, args []string, env []stri
 	if !ok {
 		return fmt.Errorf("could not extract MAC address from first DHCP offer")
 	}
-	for packet := range dhcpChan {
-		logger.Debug("Got DHCP offer", "packet", packet)
-		mac, ok := extractMac(packet)
-		if !ok {
-			logger.Warn("packet does not have an Ethernet layer", "packet", packet)
-			continue
+
+	for {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("context cancelled")
+		case packet, ok := <-dhcpChan:
+			if !ok {
+				return fmt.Errorf("dhcpChan closed")
+			}
+			logger.Debug("Got DHCP offer", "packet", packet)
+			mac, ok := extractMac(packet)
+			if !ok {
+				logger.Warn("packet does not have an Ethernet layer", "packet", packet)
+				continue
+			}
+			if time.Since(lastAlert) < 10*time.Minute {
+				logger.Info("Ignoring packet, too soon since last alert")
+				continue
+			}
+			if mac.String() == acceptedMAC.String() {
+				logger.Debug("Ignoring packet, MAC address is the accepted one")
+				continue
+			}
+			lastAlert = time.Now()
+			err := slackBot.Say(fmt.Sprintf("Rogue DHCP server detected: %s", mac.String()))
+			if err != nil {
+				return fmt.Errorf("slackBot.Say: %w", err)
+			}
 		}
-		if time.Since(lastAlert) < 10*time.Minute {
-			logger.Info("Ignoring packet, too soon since last alert")
-			continue
-		}
-		if mac.String() == acceptedMAC.String() {
-			logger.Debug("Ignoring packet, MAC address is the accepted one")
-			continue
-		}
-		lastAlert = time.Now()
-		err := slackBot.Say(fmt.Sprintf("Rogue DHCP server detected: %s", mac.String()))
-		if err != nil {
-			return fmt.Errorf("slackBot.Say: %w", err)
-		}
+		return nil
 	}
-	return nil
 }
 
 func extractMac(packet gopacket.Packet) (net.HardwareAddr, bool) {
