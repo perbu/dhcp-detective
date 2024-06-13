@@ -35,8 +35,12 @@ func run(ctx context.Context, stdout, stderr *os.File, args []string, env []stri
 	// -d debug
 	interfaceFlag := flag.String("i", "", "Interface to listen on")
 	debugFlag := flag.Bool("d", false, "Enable debug output")
+	interval := flag.Duration("interval", 5*time.Minute, "Interval between DHCP discoveries")
 	flag.CommandLine.Parse(args[1:])
-
+	// check that interval is at least 10 seconds:
+	if *interval < 10*time.Second {
+		return fmt.Errorf("interval must be at least 10 seconds, come on! (was %s)", *interval)
+	}
 	if *interfaceFlag == "" {
 		return fmt.Errorf("please provide the interface to listen on using the -i flag")
 	}
@@ -94,7 +98,7 @@ func run(ctx context.Context, stdout, stderr *os.File, args []string, env []stri
 				fmt.Fprintf(stderr, "prober.Disco: %v\n", err)
 				panic("prober.Disco failed")
 			}
-			time.Sleep(time.Minute)
+			time.Sleep(*interval)
 		}
 	}()
 
