@@ -1,0 +1,12 @@
+[Unit]
+Description=Puppy Service
+Wants=network-online.target
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/dhcp-detective
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
