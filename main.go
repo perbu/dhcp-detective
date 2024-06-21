@@ -111,11 +111,12 @@ func run(octx context.Context, stdout, stderr *os.File, args []string, env []str
 	lastAlert := time.Time{}
 	logger.Info("Waiting for first DHCP offer")
 	firstPacket := <-dhcpChan
-	logger.Info("Got first DHCP offer, assuming this DHCP server is kosher", "packet", packetToString(firstPacket))
-
 	acceptedMAC, ok := extractMac(firstPacket)
 	if !ok {
 		return fmt.Errorf("could not extract MAC address from first DHCP offer")
+	}
+	if err := slackBot.Say(fmt.Sprintf("First DHCP offer received, assuming this DHCP server is kosher: %s", acceptedMAC.String())); err != nil {
+		return fmt.Errorf("slackBot.Say: %w", err)
 	}
 
 	for {
@@ -126,12 +127,12 @@ func run(octx context.Context, stdout, stderr *os.File, args []string, env []str
 			if !ok {
 				return fmt.Errorf("dhcpChan closed")
 			}
-			logger.Debug("Got DHCP offer", "packet", packet)
 			mac, ok := extractMac(packet)
 			if !ok {
 				logger.Warn("packet does not have an Ethernet layer", "packet", packet)
 				continue
 			}
+			logger.Debug("Got DHCP offer", "packet", packet, "mac", mac.String())
 			if time.Since(lastAlert) < 10*time.Minute {
 				logger.Info("Ignoring packet, too soon since last alert")
 				continue

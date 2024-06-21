@@ -29,7 +29,7 @@ func Snoop(ctx context.Context, iface, filter string) (PacketChan, error) {
 		for {
 			select {
 			case <-ctx.Done():
-				fmt.Println("context cancelled, closing handle and channel. this may take some time.")
+				fmt.Println("context cancelled, closing handle and channel.")
 				handle.Close()
 				fmt.Println("pcap handle closed")
 				close(pchan)

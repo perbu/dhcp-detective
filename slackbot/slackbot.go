@@ -36,7 +36,6 @@ func (b *Bot) Say(message string) error {
 		return nil
 	}
 	b.logger.Info("Posting message to slack", "message", message)
-	return nil
 	_, _, err := b.client.PostMessage(b.channel, slack.MsgOptionText(message, false))
 	if err != nil {
 		return fmt.Errorf("failed to send message: %v", err)
