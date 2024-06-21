@@ -22,11 +22,12 @@ func New(token, channel string, logger *slog.Logger, debug bool) (*Bot, error) {
 		debug:   debug,
 	}
 	// check that the bot is connected to the slack API
-	_, err := bot.client.AuthTest()
+	resp, err := bot.client.AuthTest()
 	if err != nil {
 		return nil, fmt.Errorf("failed to authenticate with slack: %v", err)
 	}
-	logger.Debug("slack auth successful")
+	logger.Info("slack auth successful",
+		"user", resp.User, "team", resp.Team, "url", resp.URL, "botID", resp.UserID)
 	return bot, nil
 }
 

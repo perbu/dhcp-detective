@@ -72,7 +72,7 @@ func run(octx context.Context, stdout, stderr *os.File, args []string, env []str
 		return fmt.Errorf("slackbot.New: %w", err)
 	}
 
-	logger.Debug("slackbot initialized")
+	logger.Info("slackbot initialized", "interface", *interfaceFlag, "channel", slackChannel, "debug", *debugFlag, "loglevel", level.String(), "interval", *interval)
 
 	hostname, _ := os.Hostname()
 	if hostname == "" {
