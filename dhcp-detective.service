@@ -1,12 +1,14 @@
 [Unit]
-Description=Puppy Service
+Description=DHCP Detective
 Wants=network-online.target
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/dhcp-detective
+ExecStart=/usr/local/bin/dhcp-detective -i eth0
 Restart=on-failure
+Environment=SLACK_TOKEN=xoxb-123489485453859438495893485
+Environment=SLACK_CHANNEL=C02341283478374
 
 [Install]
 WantedBy=multi-user.target
