@@ -24,10 +24,10 @@ func main() {
 	_ = godotenv.Load()
 	err := run(ctx, os.Stdout, os.Stderr, os.Args, os.Environ())
 	if err != nil {
-		fmt.Println("error:", err)
+		fmt.Println("run() error:", err)
 		os.Exit(1)
 	}
-
+	fmt.Println("clean exit")
 }
 
 func run(octx context.Context, stdout, stderr *os.File, args []string, env []string) error {
@@ -144,6 +144,7 @@ func run(octx context.Context, stdout, stderr *os.File, args []string, env []str
 			lastAlert = time.Now()
 			err := slackBot.Say(fmt.Sprintf("Rogue DHCP server detected: %s", mac.String()))
 			if err != nil {
+				logger.Error("slackBot.Say", "error", err)
 				return fmt.Errorf("slackBot.Say: %w", err)
 			}
 		}
